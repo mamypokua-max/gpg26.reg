@@ -1,5 +1,5 @@
 const express = require('express');
-const Database = require('better-sqlite3');
+const sqlite3 = require('sqlite3').verbose();
 const multer = require('multer');
 const path = require('path');
 const QRCode = require('qrcode');
@@ -7,22 +7,30 @@ const QRCode = require('qrcode');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Middleware & File Upload Configuration
+// Configure Multer storage for file uploads
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, 'uploads/');
+    },
+    filename: (req, file, cb) => {
+        cb(null, Date.now() + path.extname(file.originalname));
+    }
+});
+const upload = multer({ storage });
+
+// Middleware Configuration
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(__dirname));
 
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => cb(null, 'uploads/'),
-    filename: (req, file, cb) => cb(null, Date.now() + path.extname(file.originalname))
-});
-const upload = multer({ storage });
-
 // Database Connection
-const db = new Database('database.db');
-    if (err) console.error('Database connection error:', err.message);
-    else console.log('Connected to SQLite database.');
- ;
+const db = new sqlite3.Database('./database.db', (err) => {
+    if (err) {
+        console.error('Database connection error:', err.message);
+    } else {
+        console.log('Connected to SQLite database.');
+    }
+});
 
 // Database Setup Tables
 db.serialize(() => {
@@ -115,5 +123,5 @@ app.patch('/api/admin/donations/items/:id/status', (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`Girls of Purpose Ghana Portal running at http://localhost:${PORT}`);
+    console.log(`Girls of Purpose Ghana Portal running on port ${PORT}`);
 });
