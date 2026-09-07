@@ -3,9 +3,16 @@ const sqlite3 = require('sqlite3').verbose();
 const multer = require('multer');
 const path = require('path');
 const QRCode = require('qrcode');
+const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// Ensure uploads directory exists on Render
+const uploadDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+}
 
 // Configure Multer storage for file uploads
 const storage = multer.diskStorage({
@@ -59,10 +66,22 @@ db.serialize(() => {
         dropoff_location TEXT,
         status TEXT DEFAULT 'Pending'
     )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS money_donations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        full_name TEXT,
+        email TEXT,
+        phone TEXT,
+        amount REAL,
+        payment_method TEXT,
+        status TEXT DEFAULT 'Pending'
+    )`);
 });
 
-// Routes
-app.post('/api/apply', upload.single('supporting_doc'), (req, res) => {
+// --- API ROUTES ---
+
+// 1. Submit Membership Application (Matches index.html)
+app.post('/api/applications', upload.single('supporting_doc'), (req, res) => {
     const { full_name, dob, gender, email, phone, area_involvement, skills } = req.body;
     const supporting_doc = req.file ? req.file.filename : null;
     
@@ -73,7 +92,8 @@ app.post('/api/apply', upload.single('supporting_doc'), (req, res) => {
     });
 });
 
-app.post('/api/donate/item', (req, res) => {
+// 2. Submit Item Donation (Matches index.html)
+app.post('/api/donations/items', (req, res) => {
     const { full_name, email, phone, items_description, category, preferred_date, preferred_time, dropoff_location } = req.body;
     
     const query = `INSERT INTO item_donations (full_name, email, phone, items_description, category, preferred_date, preferred_time, dropoff_location) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
@@ -83,6 +103,19 @@ app.post('/api/donate/item', (req, res) => {
     });
 });
 
+// 3. Submit Money Donation (Matches index.html)
+app.post('/api/donations/money', (req, res) => {
+    const { full_name, email, phone, amount, payment_method } = req.body;
+
+    const query = `INSERT INTO money_donations (full_name, email, phone, amount, payment_method) VALUES (?, ?, ?, ?, ?)`;
+    db.run(query, [full_name, email, phone, amount, payment_method], function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ message: 'Donation details logged. Please proceed with payment below.', id: this.lastID });
+    });
+});
+
+// --- ADMIN & AUXILIARY ROUTES ---
+
 app.get('/api/admin/applications', (req, res) => {
     db.all(`SELECT * FROM applications ORDER BY id DESC`, [], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
@@ -91,9 +124,12 @@ app.get('/api/admin/applications', (req, res) => {
 });
 
 app.get('/api/admin/donations', (req, res) => {
-    db.all(`SELECT * FROM item_donations ORDER BY id DESC`, [], (err, rows) => {
+    db.all(`SELECT * FROM item_donations ORDER BY id DESC`, [], (err, itemRows) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.json({ items: rows });
+        db.all(`SELECT * FROM money_donations ORDER BY id DESC`, [], (mErr, moneyRows) => {
+            if (mErr) return res.status(500).json({ error: mErr.message });
+            res.json({ items: itemRows, money: moneyRows });
+        });
     });
 });
 

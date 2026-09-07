@@ -472,91 +472,111 @@
         document.getElementById('donateChoice').style.display = 'grid';
     }
 
-    // Submit Membership Application
+    // 1. Submit Membership Application
     document.getElementById('appForm').addEventListener('submit', async (e) => {
         e.preventDefault();
+        
         const formData = new FormData();
         formData.append('full_name', document.getElementById('a_name').value);
         formData.append('dob', document.getElementById('a_dob').value);
-        formData.append('age', document.getElementById('a_age').value);
         formData.append('gender', document.getElementById('a_gender').value);
-        formData.append('country_region', document.getElementById('a_region').value);
-        formData.append('address', document.getElementById('a_address').value);
-        formData.append('phone', document.getElementById('a_phone').value);
         formData.append('email', document.getElementById('a_email').value);
-        formData.append('reason', document.getElementById('a_reason').value);
-        formData.append('referral_source', document.getElementById('a_referral').value);
-        formData.append('interests', document.getElementById('a_interests').value);
-        formData.append('skills', document.getElementById('a_skills').value);
-        formData.append('contributions', document.getElementById('a_contribution').value);
-        formData.append('experience', document.getElementById('a_experience').value);
+        formData.append('phone', document.getElementById('a_phone').value);
         formData.append('area_involvement', document.getElementById('a_area').value);
-        formData.append('declaration', document.getElementById('a_declaration').checked);
+        formData.append('skills', document.getElementById('a_skills').value);
 
-        const doc = document.getElementById('a_doc').files[0];
-        if (doc) formData.append('supporting_doc', doc);
+        const docInput = document.getElementById('a_doc');
+        if (docInput && docInput.files.length > 0) {
+            formData.append('supporting_doc', docInput.files[0]);
+        }
 
         try {
-            const res = await fetch('/api/applications', { method: 'POST', body: formData });
+            const res = await fetch('/api/applications', {
+                method: 'POST',
+                body: formData
+            });
             const data = await res.json();
+            
             const msg = document.getElementById('appMsg');
-            msg.innerText = data.message;
-            msg.style.display = 'block';
-            if (res.ok) document.getElementById('appForm').reset();
+            if (res.ok) {
+                msg.innerText = data.message || 'Application submitted successfully!';
+                msg.style.display = 'block';
+                document.getElementById('appForm').reset();
+            } else {
+                alert('Submission Error: ' + (data.error || 'Failed to submit application'));
+            }
         } catch (err) {
-            alert('Error submitting form: ' + err.message);
+            alert('Network error. Please check your connection and try again.');
         }
     });
 
-    // Submit Money Donation
+    // 2. Submit Money Donation
     document.getElementById('mForm').addEventListener('submit', async (e) => {
         e.preventDefault();
+
         const payload = {
             full_name: document.getElementById('m_name').value,
             email: document.getElementById('m_email').value,
             phone: document.getElementById('m_phone').value,
-            age: document.getElementById('m_age').value,
-            location: document.getElementById('m_location').value,
             amount: document.getElementById('m_amount').value,
             payment_method: document.getElementById('m_method').value
         };
 
-        const res = await fetch('/api/donations/money', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        const data = await res.json();
-        document.getElementById('moneyMsg').innerText = data.message;
-        document.getElementById('moneyMsg').style.display = 'block';
-        document.getElementById('paymentDetails').style.display = 'block';
+        try {
+            const res = await fetch('/api/donations/money', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+
+            if (res.ok) {
+                const msg = document.getElementById('moneyMsg');
+                msg.innerText = data.message;
+                msg.style.display = 'block';
+                document.getElementById('paymentDetails').style.display = 'block';
+            } else {
+                alert('Error: ' + (data.error || 'Failed to process request'));
+            }
+        } catch (err) {
+            alert('Network error. Please try again.');
+        }
     });
 
-    // Submit Item Donation
+    // 3. Submit Item Donation
     document.getElementById('iForm').addEventListener('submit', async (e) => {
         e.preventDefault();
+
         const payload = {
             full_name: document.getElementById('i_name').value,
             email: document.getElementById('i_email').value,
             phone: document.getElementById('i_phone').value,
-            location: document.getElementById('i_location').value,
             items_description: document.getElementById('i_desc').value,
-            quantity: document.getElementById('i_qty').value,
             category: document.getElementById('i_category').value,
-            notes: document.getElementById('i_notes').value,
             preferred_date: document.getElementById('i_date').value,
             preferred_time: document.getElementById('i_time').value,
             dropoff_location: document.getElementById('i_dropoff').value
         };
 
-        const res = await fetch('/api/donations/items', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        const data = await res.json();
-        document.getElementById('itemMsg').innerText = data.message;
-        document.getElementById('itemMsg').style.display = 'block';
+        try {
+            const res = await fetch('/api/donations/items', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+
+            if (res.ok) {
+                const msg = document.getElementById('itemMsg');
+                msg.innerText = data.message;
+                msg.style.display = 'block';
+                document.getElementById('iForm').reset();
+            } else {
+                alert('Error: ' + (data.error || 'Failed to submit item donation'));
+            }
+        } catch (err) {
+            alert('Network error. Please try again.');
+        }
     });
 </script>
 
