@@ -99,7 +99,7 @@ app.get('/api/admin/donations', (req, res) => {
 
 app.get('/api/qr', async (req, res) => {
     try {
-        const qrImage = await QRCode.toDataURL('http://localhost:5000');
+        const qrImage = await QRCode.toDataURL('https://gpg26-reg-2.onrender.com');
         res.json({ qr: qrImage });
     } catch (err) {
         res.status(500).json({ error: err.message });
