@@ -181,25 +181,53 @@
         console.error('Failed to load applications:', err);
     }
 }
-    // Load Donations
     async function loadDonations() {
+    try {
         const res = await fetch('/api/admin/donations');
         const data = await res.json();
-        const tbody = document.getElementById('itemTable');
-        tbody.innerHTML = data.items.map(i => `
-            <tr>
-                <td><strong>${i.full_name}</strong><br><small>${i.phone}</small></td>
-                <td>${i.items_description}<br><small>Cat: ${i.category}</small></td>
-                <td>${i.preferred_date || 'TBD'} @ ${i.preferred_time || 'TBD'}<br><small>${i.dropoff_location}</small></td>
-                <td><span class="status-badge status-${i.status}">${i.status}</span></td>
-                <td>
-                    ${i.status === 'Pending' ? `
-                        <button class="btn btn-approve" onclick="updateItemStatus(${i.id}, 'Confirmed')">Confirm Schedule</button>
-                    ` : 'Confirmed'}
-                </td>
-            </tr>
-        `).join('');
+        
+        const container = document.getElementById('donationsTableBody');
+        if (!container) return;
+
+        let allHtml = '';
+
+        // 1. Map Item Donations
+        if (data.items && data.items.length > 0) {
+            allHtml += data.items.map(item => `
+                <tr>
+                    <td>🎁 Item</td>
+                    <td>${item.full_name || 'N/A'}</td>
+                    <td>${item.phone || ''} / ${item.email || ''}</td>
+                    <td>${item.items_description || 'No desc'} (${item.category || 'General'})</td>
+                    <td><span class="badge">${item.status || 'Pending'}</span></td>
+                </tr>
+            `).join('');
+        }
+
+        // 2. Map Money Donations
+        if (data.money && data.money.length > 0) {
+            allHtml += data.money.map(m => `
+                <tr>
+                    <td>💰 Money</td>
+                    <td>${m.full_name || 'N/A'}</td>
+                    <td>${m.phone || ''} / ${m.email || ''}</td>
+                    <td>GHS ${m.amount || 0} (${m.payment_method || 'MoMo'})</td>
+                    <td><span class="badge">${m.status || 'Pending'}</span></td>
+                </tr>
+            `).join('');
+        }
+
+        // 3. Fallback if empty
+        if (!allHtml) {
+            allHtml = '<tr><td colspan="5">No donations recorded yet.</td></tr>';
+        }
+
+        container.innerHTML = allHtml;
+
+    } catch (err) {
+        console.error('Failed to load donations:', err);
     }
+}
 
     async function updateAppStatus(id, status) {
         await fetch(`/api/admin/applications/${id}/status`, {
