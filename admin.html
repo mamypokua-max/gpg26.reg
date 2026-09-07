@@ -5,13 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Girls of Purpose Ghana | Admin Dashboard</title>
     <style>
-        
         :root {
-    --bg-color: #fce4ec;
-    --primary-purple: #9c27b0;
-    --accent-magenta: #db2562;
-    --border-color: #f8bbd0;
-  }
+            --bg-color: #fce4ec;
+            --primary-purple: #9c27b0;
+            --accent-magenta: #db2562;
+            --border-color: #f8bbd0;
+        }
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -106,7 +105,7 @@
 <!-- QR CODE ACCESS PANEL -->
 <div class="card qr-container">
     <h3 style="margin:0; color: var(--primary-purple);">📱 Portal Entry QR Code</h3>
-    <p style="font-size: 0.85rem; color: #555;">Scan to open <code>http://localhost:5000</code> on mobile devices</p>
+    <p style="font-size: 0.85rem; color: #555;">Scan to open portal on mobile devices</p>
     <img id="qrImg" src="" alt="Portal QR Code">
 </div>
 
@@ -116,6 +115,7 @@
     <table>
         <thead>
             <tr>
+                <th>ID</th>
                 <th>Applicant</th>
                 <th>Contact</th>
                 <th>Area</th>
@@ -128,15 +128,16 @@
     </table>
 </div>
 
-<!-- ITEM DONATIONS TABLE -->
+<!-- DONATIONS TABLE (ITEMS + MONEY) -->
 <div class="card">
-    <h2>🎁 Item Donation Pledges</h2>
+    <h2>🎁 Donation Pledges & Payments</h2>
     <table>
         <thead>
             <tr>
+                <th>Type</th>
                 <th>Donor</th>
-                <th>Items Pledged</th>
-                <th>Drop-off Schedule</th>
+                <th>Contact</th>
+                <th>Details / Amount</th>
                 <th>Status</th>
                 <th>Actions</th>
             </tr>
@@ -146,96 +147,109 @@
 </div>
 
 <script>
-    // Load QR Code
+    // 1. Load QR Code
     fetch('/api/qr')
         .then(res => res.json())
-        .then(data => document.getElementById('qrImg').src = data.qr);
+        .then(data => document.getElementById('qrImg').src = data.qr)
+        .catch(err => console.error('QR Load Error:', err));
 
-   async function loadApplications() {
-    try {
-        const res = await fetch('/api/admin/applications');
-        const applications = await res.json();
-        
-        const tableBody = document.getElementById('applicationsTableBody'); // Ensure this ID matches your <tbody>
-        tableBody.innerHTML = ''; // Clear table once BEFORE looping
+    // 2. Fetch and Render Applications
+    async function loadApplications() {
+        try {
+            const res = await fetch('/api/admin/applications');
+            const applications = await res.json();
+            
+            const tableBody = document.getElementById('appTable');
+            tableBody.innerHTML = '';
 
-        if (!applications || applications.length === 0) {
-            tableBody.innerHTML = '<tr><td colspan="6">No applications received yet.</td></tr>';
-            return;
+            if (!applications || applications.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="7">No applications received yet.</td></tr>';
+                return;
+            }
+
+            applications.forEach(app => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>#${app.id}</td>
+                    <td><strong>${app.full_name || 'N/A'}</strong></td>
+                    <td>${app.email || ''}<br><small>${app.phone || ''}</small></td>
+                    <td>${app.area_involvement || 'N/A'}</td>
+                    <td>${app.supporting_doc ? `<a href="/uploads/${app.supporting_doc}" target="_blank">View File</a>` : 'None'}</td>
+                    <td><span class="status-badge status-${app.status || 'Pending'}">${app.status || 'Pending'}</span></td>
+                    <td>
+                        <button class="btn btn-approve" onclick="updateAppStatus(${app.id}, 'Approved')">Approve</button>
+                        <button class="btn btn-reject" onclick="updateAppStatus(${app.id}, 'Rejected')">Reject</button>
+                    </td>
+                `;
+                tableBody.appendChild(row);
+            });
+        } catch (err) {
+            console.error('Failed to load applications:', err);
         }
-
-        // Loop through ALL applicants and append rows
-        applications.forEach(app => {
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td>#${app.id}</td>
-                <td><strong>${app.full_name}</strong></td>
-                <td>${app.email}<br><small>${app.phone}</small></td>
-                <td>${app.area_involvement}</td>
-                <td>${app.supporting_doc ? `<a href="/uploads/${app.supporting_doc}" target="_blank">View File</a>` : 'None'}</td>
-                <td><span class="badge">${app.status}</span></td>
-            `;
-            tableBody.appendChild(row); // Appends every single user safely
-        });
-    } catch (err) {
-        console.error('Failed to load applications:', err);
     }
-}
+
+    // 3. Fetch and Render All Donations (Items + Money)
     async function loadDonations() {
-    try {
-        const res = await fetch('/api/admin/donations');
-        const data = await res.json();
-        
-        const container = document.getElementById('donationsTableBody');
-        if (!container) return;
+        try {
+            const res = await fetch('/api/admin/donations');
+            const data = await res.json();
+            
+            const container = document.getElementById('itemTable');
+            if (!container) return;
 
-        let allHtml = '';
+            let allHtml = '';
 
-        // 1. Map Item Donations
-        if (data.items && data.items.length > 0) {
-            allHtml += data.items.map(item => `
-                <tr>
-                    <td>🎁 Item</td>
-                    <td>${item.full_name || 'N/A'}</td>
-                    <td>${item.phone || ''} / ${item.email || ''}</td>
-                    <td>${item.items_description || 'No desc'} (${item.category || 'General'})</td>
-                    <td><span class="badge">${item.status || 'Pending'}</span></td>
-                </tr>
-            `).join('');
+            // Render Item Donations
+            if (data.items && data.items.length > 0) {
+                allHtml += data.items.map(item => `
+                    <tr>
+                        <td>🎁 Item</td>
+                        <td><strong>${item.full_name || 'N/A'}</strong></td>
+                        <td>${item.phone || ''} / ${item.email || ''}</td>
+                        <td>${item.items_description || 'No desc'} (${item.category || 'General'})</td>
+                        <td><span class="status-badge status-${item.status || 'Pending'}">${item.status || 'Pending'}</span></td>
+                        <td>
+                            <button class="btn btn-approve" onclick="updateItemStatus(${item.id}, 'Confirmed')">Confirm</button>
+                        </td>
+                    </tr>
+                `).join('');
+            }
+
+            // Render Money Donations
+            if (data.money && data.money.length > 0) {
+                allHtml += data.money.map(m => `
+                    <tr>
+                        <td>💰 Money</td>
+                        <td><strong>${m.full_name || 'N/A'}</strong></td>
+                        <td>${m.phone || ''} / ${m.email || ''}</td>
+                        <td><strong>GHS ${m.amount || 0}</strong> (${m.payment_method || 'MoMo'})</td>
+                        <td><span class="status-badge status-${m.status || 'Pending'}">${m.status || 'Pending'}</span></td>
+                        <td>
+                            <span style="color:#777; font-size:0.8rem;">Pledged</span>
+                        </td>
+                    </tr>
+                `).join('');
+            }
+
+            if (!allHtml) {
+                allHtml = '<tr><td colspan="6">No donations recorded yet.</td></tr>';
+            }
+
+            container.innerHTML = allHtml;
+
+        } catch (err) {
+            console.error('Failed to load donations:', err);
         }
-
-        // 2. Map Money Donations
-        if (data.money && data.money.length > 0) {
-            allHtml += data.money.map(m => `
-                <tr>
-                    <td>💰 Money</td>
-                    <td>${m.full_name || 'N/A'}</td>
-                    <td>${m.phone || ''} / ${m.email || ''}</td>
-                    <td>GHS ${m.amount || 0} (${m.payment_method || 'MoMo'})</td>
-                    <td><span class="badge">${m.status || 'Pending'}</span></td>
-                </tr>
-            `).join('');
-        }
-
-        // 3. Fallback if empty
-        if (!allHtml) {
-            allHtml = '<tr><td colspan="5">No donations recorded yet.</td></tr>';
-        }
-
-        container.innerHTML = allHtml;
-
-    } catch (err) {
-        console.error('Failed to load donations:', err);
     }
-}
 
+    // 4. Update Status API Endpoints
     async function updateAppStatus(id, status) {
         await fetch(`/api/admin/applications/${id}/status`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ status })
         });
-        loadApps();
+        loadApplications();
     }
 
     async function updateItemStatus(id, status) {
@@ -247,8 +261,11 @@
         loadDonations();
     }
 
-    loadApps();
-    loadDonations();
+    // Initialize Page Data
+    document.addEventListener('DOMContentLoaded', () => {
+        loadApplications();
+        loadDonations();
+    });
 </script>
 
 </body>
