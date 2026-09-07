@@ -1,5 +1,5 @@
 const express = require('express');
-const sqlite3 = require('sqlite3').verbose();
+const Database = require('better-sqlite3');
 const multer = require('multer');
 const path = require('path');
 const QRCode = require('qrcode');
@@ -19,10 +19,10 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 // Database Connection
-const db = new sqlite3.Database('database.sqlite', (err) => {
+const db = new Database('database.db');
     if (err) console.error('Database connection error:', err.message);
     else console.log('Connected to SQLite database.');
-});
+ ;
 
 // Database Setup Tables
 db.serialize(() => {
