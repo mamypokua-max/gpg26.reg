@@ -151,28 +151,36 @@
         .then(res => res.json())
         .then(data => document.getElementById('qrImg').src = data.qr);
 
-    // Load Applications
-    async function loadApps() {
+   async function loadApplications() {
+    try {
         const res = await fetch('/api/admin/applications');
-        const apps = await res.json();
-        const tbody = document.getElementById('appTable');
-        tbody.innerHTML = apps.map(a => `
-            <tr>
-                <td><strong>${a.full_name}</strong><br><small>${a.gender}, ${a.age || 'N/A'} yrs</small></td>
-                <td>${a.email}<br><small>${a.phone}</small></td>
-                <td>${a.area_involvement}</td>
-                <td>${a.supporting_doc ? `<a href="/uploads/${a.supporting_doc}" target="_blank">View File</a>` : 'None'}</td>
-                <td><span class="status-badge status-${a.status}">${a.status}</span></td>
-                <td>
-                    ${a.status === 'Pending' ? `
-                        <button class="btn btn-approve" onclick="updateAppStatus(${a.id}, 'Approved')">Approve</button>
-                        <button class="btn btn-reject" onclick="updateAppStatus(${a.id}, 'Rejected')">Reject</button>
-                    ` : 'Reviewed'}
-                </td>
-            </tr>
-        `).join('');
-    }
+        const applications = await res.json();
+        
+        const tableBody = document.getElementById('applicationsTableBody'); // Ensure this ID matches your <tbody>
+        tableBody.innerHTML = ''; // Clear table once BEFORE looping
 
+        if (!applications || applications.length === 0) {
+            tableBody.innerHTML = '<tr><td colspan="6">No applications received yet.</td></tr>';
+            return;
+        }
+
+        // Loop through ALL applicants and append rows
+        applications.forEach(app => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>#${app.id}</td>
+                <td><strong>${app.full_name}</strong></td>
+                <td>${app.email}<br><small>${app.phone}</small></td>
+                <td>${app.area_involvement}</td>
+                <td>${app.supporting_doc ? `<a href="/uploads/${app.supporting_doc}" target="_blank">View File</a>` : 'None'}</td>
+                <td><span class="badge">${app.status}</span></td>
+            `;
+            tableBody.appendChild(row); // Appends every single user safely
+        });
+    } catch (err) {
+        console.error('Failed to load applications:', err);
+    }
+}
     // Load Donations
     async function loadDonations() {
         const res = await fetch('/api/admin/donations');
