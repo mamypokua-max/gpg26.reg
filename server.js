@@ -1,5 +1,5 @@
 const express = require('express');
-const sqlite3 = require('sqlite3').verbose();
+const { Pool } = require('pg');
 const multer = require('multer');
 const path = require('path');
 const QRCode = require('qrcode');
@@ -30,107 +30,141 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(__dirname));
 
-// Database Connection
-const db = new sqlite3.Database('./database.db', (err) => {
-    if (err) {
-        console.error('Database connection error:', err.message);
-    } else {
-        console.log('Connected to SQLite database.');
-    }
+// Connect to Render PostgreSQL database
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
 });
 
 // Database Setup Tables
-db.serialize(() => {
-    db.run(`CREATE TABLE IF NOT EXISTS applications (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        full_name TEXT,
-        dob TEXT,
-        gender TEXT,
-        email TEXT,
-        phone TEXT,
-        area_involvement TEXT,
-        skills TEXT,
-        supporting_doc TEXT,
-        status TEXT DEFAULT 'Pending'
-    )`);
+async function initDB() {
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS applications (
+                id SERIAL PRIMARY KEY,
+                full_name VARCHAR(255),
+                dob VARCHAR(50),
+                gender VARCHAR(20),
+                email VARCHAR(255),
+                phone VARCHAR(50),
+                area_involvement VARCHAR(255),
+                skills TEXT,
+                supporting_doc VARCHAR(255),
+                status VARCHAR(50) DEFAULT 'Pending'
+            )
+        `);
 
-    db.run(`CREATE TABLE IF NOT EXISTS item_donations (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        full_name TEXT,
-        email TEXT,
-        phone TEXT,
-        items_description TEXT,
-        category TEXT,
-        preferred_date TEXT,
-        preferred_time TEXT,
-        dropoff_location TEXT,
-        status TEXT DEFAULT 'Pending'
-    )`);
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS item_donations (
+                id SERIAL PRIMARY KEY,
+                full_name VARCHAR(255),
+                email VARCHAR(255),
+                phone VARCHAR(50),
+                items_description TEXT,
+                category VARCHAR(100),
+                preferred_date VARCHAR(50),
+                preferred_time VARCHAR(50),
+                dropoff_location VARCHAR(255),
+                status VARCHAR(50) DEFAULT 'Pending'
+            )
+        `);
 
-    db.run(`CREATE TABLE IF NOT EXISTS money_donations (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        full_name TEXT,
-        email TEXT,
-        phone TEXT,
-        amount REAL,
-        payment_method TEXT,
-        status TEXT DEFAULT 'Pending'
-    )`);
-});
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS money_donations (
+                id SERIAL PRIMARY KEY,
+                full_name VARCHAR(255),
+                email VARCHAR(255),
+                phone VARCHAR(50),
+                amount NUMERIC(10,2),
+                payment_method VARCHAR(100),
+                status VARCHAR(50) DEFAULT 'Pending'
+            )
+        `);
+
+        console.log("PostgreSQL Database connected and initialized successfully.");
+    } catch (err) {
+        console.error("Database initialization error:", err);
+    }
+}
+
+initDB();
 
 // --- API ROUTES ---
 
-// 1. Submit Membership Application (Matches index.html)
-app.post('/api/applications', upload.single('supporting_doc'), (req, res) => {
-    const { full_name, dob, gender, email, phone, area_involvement, skills } = req.body;
-    const supporting_doc = req.file ? req.file.filename : null;
-    
-    const query = `INSERT INTO applications (full_name, dob, gender, email, phone, area_involvement, skills, supporting_doc) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
-    db.run(query, [full_name, dob, gender, email, phone, area_involvement, skills, supporting_doc], function(err) {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ message: 'Application submitted successfully!', id: this.lastID });
-    });
+// 1. Submit Membership Application
+app.post('/api/applications', upload.single('supporting_doc'), async (req, res) => {
+    try {
+        const { full_name, dob, gender, email, phone, area_involvement, skills } = req.body;
+        const supporting_doc = req.file ? req.file.filename : null;
+        
+        const query = `
+            INSERT INTO applications (full_name, dob, gender, email, phone, area_involvement, skills, supporting_doc) 
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id
+        `;
+        const result = await pool.query(query, [full_name, dob, gender, email, phone, area_involvement, skills, supporting_doc]);
+        
+        res.json({ message: 'Application submitted successfully!', id: result.rows[0].id });
+    } catch (err) {
+        console.error('Error saving application:', err);
+        res.status(500).json({ error: err.message });
+    }
 });
 
-// 2. Submit Item Donation (Matches index.html)
-app.post('/api/donations/items', (req, res) => {
-    const { full_name, email, phone, items_description, category, preferred_date, preferred_time, dropoff_location } = req.body;
-    
-    const query = `INSERT INTO item_donations (full_name, email, phone, items_description, category, preferred_date, preferred_time, dropoff_location) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
-    db.run(query, [full_name, email, phone, items_description, category, preferred_date, preferred_time, dropoff_location], function(err) {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ message: 'Item donation pledged successfully!', id: this.lastID });
-    });
+// 2. Submit Item Donation
+app.post('/api/donations/items', async (req, res) => {
+    try {
+        const { full_name, email, phone, items_description, category, preferred_date, preferred_time, dropoff_location } = req.body;
+        
+        const query = `
+            INSERT INTO item_donations (full_name, email, phone, items_description, category, preferred_date, preferred_time, dropoff_location) 
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id
+        `;
+        const result = await pool.query(query, [full_name, email, phone, items_description, category, preferred_date, preferred_time, dropoff_location]);
+        
+        res.json({ message: 'Item donation pledged successfully!', id: result.rows[0].id });
+    } catch (err) {
+        console.error('Error saving item donation:', err);
+        res.status(500).json({ error: err.message });
+    }
 });
 
-// 3. Submit Money Donation (Matches index.html)
-app.post('/api/donations/money', (req, res) => {
-    const { full_name, email, phone, amount, payment_method } = req.body;
+// 3. Submit Money Donation
+app.post('/api/donations/money', async (req, res) => {
+    try {
+        const { full_name, email, phone, amount, payment_method } = req.body;
 
-    const query = `INSERT INTO money_donations (full_name, email, phone, amount, payment_method) VALUES (?, ?, ?, ?, ?)`;
-    db.run(query, [full_name, email, phone, amount, payment_method], function(err) {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ message: 'Donation details logged. Please proceed with payment below.', id: this.lastID });
-    });
+        const query = `
+            INSERT INTO money_donations (full_name, email, phone, amount, payment_method) 
+            VALUES ($1, $2, $3, $4, $5) RETURNING id
+        `;
+        const result = await pool.query(query, [full_name, email, phone, amount, payment_method]);
+        
+        res.json({ message: 'Donation details logged. Please proceed with payment below.', id: result.rows[0].id });
+    } catch (err) {
+        console.error('Error saving money donation:', err);
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // --- ADMIN & AUXILIARY ROUTES ---
 
-app.get('/api/admin/applications', (req, res) => {
-    db.all(`SELECT * FROM applications ORDER BY id DESC`, [], (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json(rows);
-    });
+app.get('/api/admin/applications', async (req, res) => {
+    try {
+        const result = await pool.query(`SELECT * FROM applications ORDER BY id DESC`);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-app.get('/api/admin/donations', (req, res) => {
-    db.all(`SELECT * FROM item_donations ORDER BY id DESC`, [], (err, itemRows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        db.all(`SELECT * FROM money_donations ORDER BY id DESC`, [], (mErr, moneyRows) => {
-            if (mErr) return res.status(500).json({ error: mErr.message });
-            res.json({ items: itemRows, money: moneyRows });
-        });
-    });
+app.get('/api/admin/donations', async (req, res) => {
+    try {
+        const itemRows = await pool.query(`SELECT * FROM item_donations ORDER BY id DESC`);
+        const moneyRows = await pool.query(`SELECT * FROM money_donations ORDER BY id DESC`);
+        res.json({ items: itemRows.rows, money: moneyRows.rows });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 app.get('/api/qr', async (req, res) => {
@@ -142,20 +176,24 @@ app.get('/api/qr', async (req, res) => {
     }
 });
 
-app.patch('/api/admin/applications/:id/status', (req, res) => {
-    const { status } = req.body;
-    db.run(`UPDATE applications SET status = ? WHERE id = ?`, [status, req.params.id], function(err) {
-        if (err) return res.status(500).json({ error: err.message });
+app.patch('/api/admin/applications/:id/status', async (req, res) => {
+    try {
+        const { status } = req.body;
+        await pool.query(`UPDATE applications SET status = $1 WHERE id = $2`, [status, req.params.id]);
         res.json({ message: `Applicant status updated to ${status}` });
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-app.patch('/api/admin/donations/items/:id/status', (req, res) => {
-    const { status } = req.body;
-    db.run(`UPDATE item_donations SET status = ? WHERE id = ?`, [status, req.params.id], function(err) {
-        if (err) return res.status(500).json({ error: err.message });
+app.patch('/api/admin/donations/items/:id/status', async (req, res) => {
+    try {
+        const { status } = req.body;
+        await pool.query(`UPDATE item_donations SET status = $1 WHERE id = $2`, [status, req.params.id]);
         res.json({ message: `Donation status updated to ${status}` });
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 app.listen(PORT, () => {
